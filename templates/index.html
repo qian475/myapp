@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Data from MySQL</title>
+  </head>
+  <body>
+    <h1>Data from MySQL</h1>
+    <table>
+      <tr>
+        <th>Column1</th>
+        <th>Column2</th>
+        <th>Column3</th>
+      </tr>
+      {% for row in data %}
+        <tr>
+          <td>{{ row[0] }}</td>
+          <td>{{ row[1] }}</td>
+          <td>{{ row[2] }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  </body>
+</html>
