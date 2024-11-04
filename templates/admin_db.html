@@ -1,0 +1,208 @@
+{% extends "admin.html" %}
+{% block content %}
+    <div class="db-management">
+        <!-- 用户列表 -->
+        <div class="table-card">
+            <h3>用户列表</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>用户名</th>
+                        <th>角色</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user[0] }}</td>
+                        <td>
+                            <input type="text" 
+                                   name="username" 
+                                   value="{{ user[1] }}" 
+                                   required
+                                   form="edit-form-{{ user[0] }}">
+                        </td>
+                        <td>
+                            <input type="text" 
+                                   name="role" 
+                                   value="{{ user[2] }}"
+                                   list="roleList" 
+                                   required 
+                                   form="edit-form-{{ user[0] }}">
+                            <datalist id="roleList">
+                                <option value="管理员">
+                                <option value="财务人员">
+                                <option value="采购人员">
+                                <option value="其他">
+                            </datalist>
+                        </td>
+                        <td>
+                            <form id="edit-form-{{ user[0] }}" method="POST" action="{{ url_for('admin_db_edit') }}" style="display: inline;">
+                                <input type="hidden" name="user_id" value="{{ user[0] }}">
+                                <input type="password" name="password" placeholder="新密码（可选）">
+                                <button type="submit" class="edit-btn">保存</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('admin_db_delete') }}" style="display: inline;">
+                                <input type="hidden" name="user_id" value="{{ user[0] }}">
+                                <button type="submit" class="delete-btn" onclick="return confirm('确定要删除此用户吗？')">删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    <!-- 添加新用户的表单行 -->
+                    <tr class="add-user-row">
+                        <td>新用户</td>
+                        <td colspan="3">
+                            <form method="POST" action="{{ url_for('admin_db_add') }}" class="add-user-form">
+                                <input type="text" name="username" required placeholder="用户名">
+                                <input type="text" 
+                                       name="role" 
+                                       list="roleList" 
+                                       required 
+                                       placeholder="请输入或选择角色">
+                                <input type="password" name="password" required placeholder="密码">
+                                <button type="submit" class="submit-btn">添加</button>
+                                
+                                <datalist id="roleList">
+                                    <option value="管理员">
+                                    <option value="财务人员">
+                                    <option value="采购人员">
+                                    <option value="其他">
+                                </datalist>
+                            </form>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <style>
+        .db-management {
+            display: grid;
+            gap: 30px;
+            margin-top: 20px;
+        }
+
+        .form-card, .table-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #34495e;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            border-color: #3498db;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        /* 添加占位符文本的样式 */
+        ::placeholder {
+            color: #95a5a6;
+            font-size: 14px;
+        }
+
+        .submit-btn, .delete-btn {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .submit-btn:hover, .delete-btn:hover {
+            background-color: #2980b9;
+        }
+
+        /* 添加新的样式 */
+        .add-user-row input {
+            width: 90%;
+            margin: 2px;
+        }
+        
+        .add-user-row .submit-btn {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .edit-btn {
+            background-color: #2ecc71;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+        
+        .edit-btn:hover {
+            background-color: #27ae60;
+        }
+        
+        /* 调整表格中输入框的样式 */
+        td input[type="text"],
+        td input[type="password"] {
+            width: 90%;
+            padding: 4px 8px;
+            margin: 2px;
+            font-size: 13px;
+        }
+        
+        /* 调整按钮大小和间距 */
+        td .delete-btn {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .add-user-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .add-user-form input {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .add-user-form button {
+            flex-shrink: 0;
+        }
+    </style>
+{% endblock %} 

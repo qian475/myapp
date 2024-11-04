@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>管理员页面</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f5f6fa;
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 250px;
+            background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
+            padding: 30px 0;
+            color: white;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .sidebar h2 {
+            padding: 0 30px;
+            margin-bottom: 30px;
+            font-size: 24px;
+            color: #ecf0f1;
+            border-left: 4px solid #3498db;
+        }
+
+        .nav-item {
+            padding: 15px 30px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-item:hover {
+            background-color: rgba(255,255,255,0.1);
+            transform: translateX(5px);
+        }
+
+        .nav-item a {
+            text-decoration: none;
+            color: #ecf0f1;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+        }
+
+        /* 添加图标样式 */
+        .nav-item a:before {
+            content: '•';
+            margin-right: 10px;
+            color: #3498db;
+        }
+
+        .content {
+            flex: 1;
+            padding: 40px;
+            background-color: #f5f6fa;
+        }
+
+        .content h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 32px;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            display: inline-block;
+        }
+
+        .welcome-message {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .welcome-message p {
+            color: #7f8c8d;
+            font-size: 16px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            border: 1px solid #eee;
+            padding: 12px 15px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: 500;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        tr:hover {
+            background-color: #f1f2f6;
+        }
+
+        /* 添加响应式设计 */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                min-height: auto;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+
+        /* 添加滚动条美化 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>管理菜单</h2>
+            <div class="nav-item">
+                <a href="{{ url_for('admin_db') }}">用户管理</a>
+            </div>
+            <div class="nav-item">
+                <a href="{{ url_for('logout') }}">退出登录</a>
+            </div>
+        </div>
+        <div class="content">
+            <h1>管理员页面</h1>
+            <div class="welcome-message">
+                <p>欢迎回来，管理员！今天是 {{ now.strftime('%Y年%m月%d日') }}</p>
+            </div>
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</body>
+</html> 
