@@ -18,7 +18,7 @@ stages:
         displayName: 镜像构建
         type: cert
         certificate: 218440f0-7d51-013d-905e-2a1ee40ac932
-        tag: ${GITEE_PIPELINE_BUILD_NUMBER}
+        tag: myapp-${GITEE_PIPELINE_BUILD_NUMBER}
         dockerfile: ./Dockerfile
         context: ''
         artifacts: []
