@@ -1,0 +1,31 @@
+name: Docker Image CI
+
+# 触发条件：在 push 到 main 分支时运行
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 登录 Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_USERNAME.DOCKER_PASSWORD }}
+
+      # 构建 Docker 镜像
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME.DOCKER_USERNAME }}/myapp:latest .
+
+      # 推送 Docker 镜像到 Docker Hub
+      - name: Push Docker image
+        run: docker push ${{ secrets.DOCKER_USERNAME.DOCKER_USERNAME }}/myapp:latest
