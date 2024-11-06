@@ -19,13 +19,13 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
-          username: vgvgt@163.com
+          username: vgvgt
           password: q111111
 
       # 构建 Docker 镜像
       - name: Build Docker image
-        run: docker build -t vgvgt@163.com/myapp:latest .
+        run: docker build -t vgvgt/vgvgt/myapp:latest .
 
       # 推送 Docker 镜像到 Docker Hub
       - name: Push Docker image
-        run: docker push vgvgt@163.com/myapp:latest
+        run: docker push vgvgt/vgvgt/myapp:latest
