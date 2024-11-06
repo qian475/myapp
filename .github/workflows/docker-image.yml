@@ -20,7 +20,7 @@ jobs:
         uses: docker/login-action@v2
         with:
           username: vgvgt
-          password: q111111
+          password: qdckr_pat_gcZ1wKtHJp2TolR0GyXlnf7IG5Y
 
       # 构建 Docker 镜像
       - name: Build Docker image
