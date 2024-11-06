@@ -24,8 +24,8 @@ jobs:
 
       # 构建 Docker 镜像
       - name: Build Docker image
-        run: docker build -t vgvgt/vgvgt/myapp:latest .
+        run: docker build -t vgvgt/vgvgt:latest .
 
       # 推送 Docker 镜像到 Docker Hub
       - name: Push Docker image
-        run: docker push vgvgt/vgvgt/myapp:latest
+        run: docker push vgvgt/vgvgt:latest
