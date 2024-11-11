@@ -150,6 +150,29 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #555;
         }
+
+        .database-menu {
+            position: relative;
+        }
+
+        .submenu {
+            display: none;
+            background: rgba(44, 62, 80, 0.95);
+            padding: 10px 0;
+        }
+
+        .submenu.show {
+            display: block;
+        }
+
+        .sub-item {
+            padding: 8px 30px 8px 45px;
+            font-size: 14px;
+        }
+
+        .sub-item:hover {
+            background-color: rgba(255,255,255,0.1);
+        }
     </style>
 </head>
 <body>
@@ -159,16 +182,25 @@
             <div class="nav-item">
                 <a href="{{ url_for('admin_db') }}">用户管理</a>
             </div>
-            <div class="nav-item">
-                <a href="{{ url_for('admin_sheet') }}">数据库管理</a>
+            <div class="nav-item database-menu">
+                <a href="javascript:void(0)">数据库管理</a>
+                {% if tables %}
+                <div class="submenu">
+                    {% for table in tables %}
+                    <div class="nav-item sub-item">
+                        <a href="{{ url_for('admin_sheet') }}?table={{ table }}">{{ table }}</a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="nav-item">
                 <a href="{{ url_for('logout') }}">退出登录</a>
             </div>
         </div>
         <div class="content">
-            <h1>管理员页面</h1>
             {% if not request.endpoint in ['admin_db', 'admin_sheet'] %}
+            <h1>管理员页面</h1>
             <div class="welcome-message">
                 <p>欢迎回来，管理员！</p>
             </div>
@@ -176,5 +208,31 @@
             {% block content %}{% endblock %}
         </div>
     </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const dbMenu = document.querySelector('.database-menu > a');
+        const submenu = document.querySelector('.submenu');
+        
+        // 检查当前页面状态
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentPath = window.location.pathname;
+        
+        // 如果是在数据库管理相关页面或有table参数时显示子菜单
+        if (urlParams.has('table') || sessionStorage.getItem('submenuOpen') === 'true') {
+            submenu.classList.add('show');
+        }
+        
+        // 为数据库管理链接添加点击事件
+        dbMenu.addEventListener('click', function(e) {
+            e.preventDefault();
+            submenu.classList.toggle('show');
+        });
+        
+        // 阻止子菜单项的点击事件冒泡
+        submenu.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    });
+    </script>
 </body>
 </html> 

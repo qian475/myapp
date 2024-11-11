@@ -105,7 +105,7 @@ def register():
 @app.route('/admin')
 def admin_page():
     if 'user_id' in session and session['role'] == '管理员':
-        return render_template('admin.html', now=datetime.now())
+        return render_template('admin.html', now=datetime.now(), tables=get_all_tables())
     return redirect(url_for('login'))
 
 @app.route('/finance')
@@ -146,7 +146,7 @@ def admin_db():
     
     query = "SELECT id, username, role FROM users"
     users = execute_query(query)
-    return render_template('admin_db.html', users=users, now=datetime.now())
+    return render_template('admin_db.html', users=users, now=datetime.now(), tables=get_all_tables())
 
 @app.route('/admin/db/add', methods=['POST'])
 def admin_db_add():
@@ -230,17 +230,51 @@ def on_leave(data):
     leave_room(room)
     emit('status', {'msg': f'{data["username"]} has left the room.'}, room=room)
 
+def get_table_columns(table_name):
+    query = """
+    SELECT column_name 
+    FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = %s
+    """
+    print(query)
+    columns = execute_query(query, (table_name,))
+    print(columns)
+    return [col[0] for col in columns]
+
 @app.route('/sheet')
 def sheet_view():
     if 'user_id' not in session or session['role'] != '管理员':
         return redirect(url_for('login'))
-    return render_template('sheet.html')
+    
+    table_name = request.args.get('table')
+    print(f"Received table_name: {table_name}")  # 调试输出
+    
+    columns = []
+    if table_name:
+        columns = get_table_columns(table_name)
+        print(f"Found columns: {columns}")  # 调试输出
+    
+    return render_template('sheet.html', columns=columns)
+
+def get_all_tables():
+    query = """
+    SELECT table_name 
+    FROM information_schema.tables 
+    WHERE table_schema = 'public'
+    """
+    return [table[0] for table in execute_query(query)]
 
 @app.route('/admin/sheet')
 def admin_sheet():
     if 'user_id' not in session or session['role'] != '管理员':
         return redirect(url_for('login'))
-    return render_template('admin_sheet.html')
+    
+    tables = get_all_tables()  # 获取所有表名
+    selected_table = request.args.get('table')  # 获取当前选中的表名
+    
+    return render_template('admin_sheet.html', tables=tables, selected_table=selected_table)
+
+
 
 if __name__ == '__main__':
     #app.run(host='0.0.0.0', debug=True)

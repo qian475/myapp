@@ -33,6 +33,9 @@
                 luckysheet.setCellValue(data.row, data.col, data.value);
             });
 
+            // Get columns from Flask template
+            var columns = {{ columns|tojson|safe if columns else '[]' }};
+            console.log(columns);
             var options = {
                 container: 'luckysheet',
                 lang: lang,
@@ -160,6 +163,18 @@
                     }
                 }]
             }; */
+
+            options.data = [{
+                name: "Sheet1",
+                color: "",
+                status: 1,
+                order: 0,
+                data: [],
+                config: {},
+                index: 0,
+                // Set column count based on database columns
+                column: columns.length || 26  // Default to 26 if no columns specified
+            }];
 
             luckysheet.create(options);
         });
