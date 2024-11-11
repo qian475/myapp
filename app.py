@@ -2,13 +2,15 @@ from flask import Flask, render_template, request, redirect, url_for, session
 import psycopg2
 from datetime import datetime
 import hashlib
+from flask_socketio import SocketIO, emit, join_room, leave_room
 
 app = Flask(__name__, 
     template_folder='templates',  # 设置模板目录
     static_folder='static'        # 设置静态文件目录
 )
 app.secret_key = 'your_secret_key'
-
+# 初始化 SocketIO
+socketio = SocketIO(app)
 # 数据库配置
 class DBConfig:
     POSTGRES = {
@@ -200,6 +202,46 @@ def admin_db_edit():
         return redirect(url_for('admin_db'))
     except:
         return '修改用户失败'
+    
+
+
+@socketio.on('connect')
+def handle_connect():
+    print('Client connected')
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print('Client disconnected')
+
+@socketio.on('update_cell')
+def handle_update_cell(data):
+    # 处理单元格更新
+    emit('update_cell', data, broadcast=True, include_self=False)
+
+@socketio.on('join')
+def on_join(data):
+    room = data['room']
+    join_room(room)
+    emit('status', {'msg': f'{data["username"]} has entered the room.'}, room=room)
+
+@socketio.on('leave')
+def on_leave(data):
+    room = data['room']
+    leave_room(room)
+    emit('status', {'msg': f'{data["username"]} has left the room.'}, room=room)
+
+@app.route('/sheet')
+def sheet_view():
+    if 'user_id' not in session or session['role'] != '管理员':
+        return redirect(url_for('login'))
+    return render_template('sheet.html')
+
+@app.route('/admin/sheet')
+def admin_sheet():
+    if 'user_id' not in session or session['role'] != '管理员':
+        return redirect(url_for('login'))
+    return render_template('admin_sheet.html')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    #app.run(host='0.0.0.0', debug=True)
+    socketio.run(app, debug=True)

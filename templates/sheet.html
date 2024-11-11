@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Luckysheet 页面</title>
+    <!-- 引入本地 Luckysheet 的 CSS 和 JS -->
+    <link rel='stylesheet' href='./static/luckysheet/plugins/css/pluginsCss.css' />
+	<link rel='stylesheet' href='./static/luckysheet/plugins/plugins.css' />
+	<link rel='stylesheet' href='./static/luckysheet/css/luckysheet.css' />
+	<link rel='stylesheet' href='./static/luckysheet/assets/iconfont/iconfont.css' />
+	<script src="./static/luckysheet/plugins/js/plugin.js"></script>
+
+	<!-- rollup luckysheet.js -->
+	<script src="./static/luckysheet/luckysheet.umd.js"></script>
+
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+
+</head>
+<body>
+    <div id="luckysheet" style="height: 100vh;"></div>
+
+    <script>
+        $(function () {
+            var lang = 'zh';
+            var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+
+            socket.on('connect', function() {
+                console.log('Connected to server');
+            });
+
+            socket.on('update_cell', function(data) {
+                // 更新 Luckysheet 的单元格
+                luckysheet.setCellValue(data.row, data.col, data.value);
+            });
+
+            var options = {
+                container: 'luckysheet',
+                lang: lang,
+                forceCalculation: false,
+                showinfobar: false,
+                plugins: ['chart'],
+                fontList: [
+                    {
+                        "fontName": "HanaleiFill",
+                        "url": "./static/assets/iconfont/HanaleiFill-Regular.ttf"
+                    },
+                    {
+                        "fontName": "Anton",
+                        "url": "./static/assets/iconfont/Anton-Regular.ttf"
+                    },
+                    {
+                        "fontName": "Pacifico",
+                        "url": "./static/assets/iconfont/Pacifico-Regular.ttf"
+                    }
+                ],
+                hook: {
+                    cellDragStop: function (cell, postion, sheetFile, ctx, event) {
+                        // console.info(cell, postion, sheetFile, ctx, event);
+                    },
+                    rowTitleCellRenderBefore: function (rowNum, postion, ctx) {
+                        // console.log(rowNum);
+                    },
+                    rowTitleCellRenderAfter: function (rowNum, postion, ctx) {
+                        // console.log(ctx);
+                    },
+                    columnTitleCellRenderBefore: function (columnAbc, postion, ctx) {
+                        // console.log(columnAbc);
+                    },
+                    columnTitleCellRenderAfter: function (columnAbc, postion, ctx) {
+                        // console.log(postion);
+                    },
+                    cellRenderBefore: function (cell, postion, sheetFile, ctx) {
+                        // console.log(cell, postion, sheetFile, ctx);
+                    },
+                    cellRenderAfter: function (cell, postion, sheetFile, ctx) {
+                        // console.log(postion);
+                    },
+                    cellMousedownBefore: function (cell, postion, sheetFile, ctx) {
+                        // console.log(postion);
+                    },
+                    cellMousedown: function (cell, postion, sheetFile, ctx) {
+                        // console.log(sheetFile);
+                    },
+                    sheetMousemove: function (cell, postion, sheetFile, moveState, ctx) {
+                        // console.log(cell, postion, sheetFile, moveState, ctx);
+                    },
+                    sheetMouseup: function (cell, postion, sheetFile, moveState, ctx) {
+                        // console.log(cell, postion, sheetFile, moveState, ctx);
+                    },
+                    cellAllRenderBefore: function (data, sheetFile, ctx) {
+                        // console.info(data, sheetFile, ctx);
+                    },
+                    updated: function (operate) {
+                        // console.info(operate);
+                    },
+                    cellUpdateBefore: function (r, c, value) {
+ /*                        console.log('cellUpdateBefore', r, c, value.v, 'mmmmmmm',luckysheet.getCellValue(r, c));
+                        if (luckysheet.getCellValue(r, c) == value.v) {
+                            return false;
+                            console.log('cellUpdateBefore......', r, c, value, 'false', luckysheet.getCellValue(r, c));
+                        } */
+                    },
+                    cellUpdated: function (r, c, oldValue, newValue, isRefresh) {
+                        // 当单元格更新时，发送更新到服务器
+                        //console.log('cellUpdated', r, c, oldValue, newValue, isRefresh);
+                        socket.emit('update_cell', {row: r, col: c, value: newValue});
+                        
+                    },
+                    sheetActivate: function (index, isPivotInitial, isNewSheet) {
+                        // console.info(index, isPivotInitial, isNewSheet);
+                    },
+                    rangeSelect: function (index, sheet) {
+                        // console.info(index, sheet);
+                    },
+                    commentInsertBefore: function (r, c) {
+                        // console.info(r, c);
+                    },
+                    commentInsertAfter: function (r, c, cell) {
+                        // console.info(r, c, cell);
+                    },
+                    commentDeleteBefore: function (r, c, cell) {
+                        // console.info(r, c, cell);
+                    },
+                    commentDeleteAfter: function (r, c, cell) {
+                        // console.info(r, c, cell);
+                    },
+                    commentUpdateBefore: function (r, c, value) {
+                        // console.info(r, c, value);
+                    },
+                    commentUpdateAfter: function (r, c, oldCell, newCell) {
+                        // console.info(r, c, oldCell, newCell);
+                    },
+                    cellEditBefore: function (range) {
+                        // console.info(range);
+                    },
+                    workbookCreateAfter: function (json) {
+                        // console.info(json);
+                    },
+                    rangePasteBefore: function (range, data) {
+                        // console.info('rangePasteBefore', range, data);
+                        // return false; //Can intercept paste
+                    }
+                }
+            };
+
+            options.loading = {
+                image: () => {
+                    return `<svg viewBox="25 25 50 50" class="circular">
+                        <circle cx="50" cy="50" r="20" fill="none"></circle>
+                    </svg>`;
+                },
+                imageClass: "loadingAnimation"
+            };
+
+/*             options.cellRightClickConfig = {
+                customs: [{
+                    title: 'test',
+                    onClick: function (clickEvent, event, params) {
+                        console.log('function test click', clickEvent, event, params);
+                    }
+                }]
+            }; */
+
+            luckysheet.create(options);
+        });
+    </script>
+</body>
+</html>
