@@ -1,8 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session
-import mysql.connector
-import sqlite3
-import os
+import psycopg2
 from datetime import datetime
+import hashlib
 
 app = Flask(__name__, 
     template_folder='templates',  # 设置模板目录
@@ -12,45 +11,19 @@ app.secret_key = 'your_secret_key'
 
 # 数据库配置
 class DBConfig:
-    MYSQL = {
-        'host': "java-demo-db-mysql.ns-7otl3mb2.svc",
-        'user': "root",
-        'password': "l9h8f24b",
-        'database': "test_db"
-    }
-    
-    SQLITE = {
-        'path': 'local.db'  # SQLite数据库文件路径
+    POSTGRES = {
+        'host': "101.132.80.183",
+        'port': "5433",
+        'database': "db5661cc1a4f174e81b983a51ce3808a29mydata",
+        'user': "hanfu_data",
+        'password': "Qq111111"
     }
 
-# 当前使用的数据库类型（'mysql' 或 'sqlite'）
-CURRENT_DB = 'sqlite'
-
+# 获取数据库连接
 def get_db_connection():
-    if CURRENT_DB == 'mysql':
-        return mysql.connector.connect(**DBConfig.MYSQL)
-    else:
-        return sqlite3.connect(DBConfig.SQLITE['path'])
+    return psycopg2.connect(**DBConfig.POSTGRES)
 
-def init_sqlite_db():
-    conn = sqlite3.connect(DBConfig.SQLITE['path'])
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-# 确保SQLite数据库存在
-if not os.path.exists(DBConfig.SQLITE['path']):
-    init_sqlite_db()
-
+# 执行查询
 def execute_query(query, params=None, commit=False):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -63,6 +36,10 @@ def execute_query(query, params=None, commit=False):
     finally:
         cursor.close()
         conn.close()
+
+# Add this helper function for password hashing
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 @app.route('/')
 def index():
@@ -82,10 +59,9 @@ def index():
 def login():
     if request.method == 'POST':
         username = request.form['username']
-        password = request.form['password']
+        password = hash_password(request.form['password'])  # Hash the password
         
-        query = "SELECT id, role FROM users WHERE username = ? AND password = ?" if CURRENT_DB == 'sqlite' else \
-                "SELECT id, role FROM users WHERE username = %s AND password = %s"
+        query = "SELECT id, role FROM users WHERE username = %s AND password = %s"  # Changed ? to %s for PostgreSQL
         
         user = execute_query(query, (username, password))
         
@@ -100,15 +76,22 @@ def login():
 def register():
     if request.method == 'POST':
         username = request.form['username']
-        password = request.form['password']
-        confirm_password = request.form['confirm_password']
+        password = hash_password(request.form['password'])  # Hash the password
+        confirm_password = hash_password(request.form['confirm_password'])  # Hash confirmation password
         role = request.form['role']
+        
+        # 不允许注册管理员角色
+        if role == '管理员':
+            return '不允许注册管理员角色'
+            
+        # 为财务人员和采购人员添加待审核后缀
+        if role in ['财务人员', '采购人员']:
+            role = f"{role}(待审核)"
         
         if password != confirm_password:
             return '两次输入的密码不一致'
         
-        query = "INSERT INTO users (username, password, role) VALUES (?, ?, ?)" if CURRENT_DB == 'sqlite' else \
-                "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"
+        query = "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"
         
         try:
             execute_query(query, (username, password, role), commit=True)
@@ -169,11 +152,10 @@ def admin_db_add():
         return redirect(url_for('login'))
     
     username = request.form['username']
-    password = request.form['password']
+    password = hash_password(request.form['password'])  # Hash the password
     role = request.form['role']
     
-    query = "INSERT INTO users (username, password, role) VALUES (?, ?, ?)" if CURRENT_DB == 'sqlite' else \
-            "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"
+    query = "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"  # Changed ? to %s for PostgreSQL
     
     try:
         execute_query(query, (username, password, role), commit=True)
@@ -187,8 +169,7 @@ def admin_db_delete():
         return redirect(url_for('login'))
     
     user_id = request.form['user_id']
-    query = "DELETE FROM users WHERE id = ?" if CURRENT_DB == 'sqlite' else \
-            "DELETE FROM users WHERE id = %s"
+    query = "DELETE FROM users WHERE id = ?"
     
     try:
         execute_query(query, (user_id,), commit=True)
@@ -207,12 +188,11 @@ def admin_db_edit():
     password = request.form.get('password')  # 密码是可选的
     
     if password:  # 如果提供了新密码
-        query = "UPDATE users SET username = ?, role = ?, password = ? WHERE id = ?" if CURRENT_DB == 'sqlite' else \
-                "UPDATE users SET username = %s, role = %s, password = %s WHERE id = %s"
+        password = hash_password(password)  # Hash the new password
+        query = "UPDATE users SET username = %s, role = %s, password = %s WHERE id = %s"  # Changed ? to %s for PostgreSQL
         params = (username, role, password, user_id)
-    else:  # 如果没有提供新密码，只更新用户名和角色
-        query = "UPDATE users SET username = ?, role = ? WHERE id = ?" if CURRENT_DB == 'sqlite' else \
-                "UPDATE users SET username = %s, role = %s WHERE id = %s"
+    else:
+        query = "UPDATE users SET username = %s, role = %s WHERE id = %s"  # Changed ? to %s for PostgreSQL
         params = (username, role, user_id)
     
     try:
