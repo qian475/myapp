@@ -37,6 +37,7 @@
                 forceCalculation: false,
                 showinfobar: false,
                 gridKey: tableName,
+                user_name: "{{ request.session.get('role', '') }}",
                 allowUpdate: true,
                 loadUrl: `/luckysheet/api/loadUrl?table=${tableName}`,
                 updateUrl: `ws://${document.location.host}/luckysheet/api/updateUrl`,
@@ -166,7 +167,7 @@
             if (options.loadUrl) {
                 delete options.data;
             }
-
+            console.log(options)
             luckysheet.create(options);
         });
     </script>

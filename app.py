@@ -268,28 +268,33 @@ async def admin_sheet(request: Request):
 # 复用原有的 Pool 类来管理 WebSocket 连接
 class Pool:
     lock = threading.Lock()
-    pool = {}
+    pools = {}
 
     @classmethod
-    def add(cls, uid, ws):
+    def add(cls, table_name, uid, ws):
         with cls.lock:
-            cls.pool[uid] = ws
+            if table_name not in cls.pools:
+                cls.pools[table_name] = {}
+            cls.pools[table_name][uid] = ws
 
     @classmethod
-    def delete(cls, uid):
+    def delete(cls, table_name, uid):
         with cls.lock:
-            cls.pool.pop(uid, None)
+            if table_name in cls.pools:
+                cls.pools[table_name].pop(uid, None)
 
     @classmethod
-    async def notify(cls, data, by):
+    async def notify(cls, table_name, data, by):
+        #print(f"Notifying table: {table_name}, data: {data}, by: {by}")
         with cls.lock:
-            for uid, ws in cls.pool.items():
-                if uid == by:
-                    continue
-                try:
-                    await ws.send_text(data)
-                except Exception:
-                    pass
+            if table_name in cls.pools:
+                for uid, ws in cls.pools[table_name].items():
+                    if uid == by:
+                        continue
+                    try:
+                        await ws.send_text(data)
+                    except Exception:
+                        pass
 
 
 @app.post("/luckysheet/api/loadUrl")
@@ -307,7 +312,7 @@ async def load(request: Request):
             "celldata": [],
             "column": 26,
             "row": 100,
-            "total": 1,
+            "total": 1
         }])
 
     # Get columns from the table
@@ -319,7 +324,15 @@ async def load(request: Request):
     
     # Convert database data to celldata format
     celldata = []
-    for row_idx, row in enumerate(rows):
+    # Add headers
+    for col_idx, col_name in enumerate(columns):
+        celldata.append({
+            "r": 0,
+            "c": col_idx,
+            "v": {"v": col_name, "m": col_name}
+        })
+    
+    for row_idx, row in enumerate(rows, start=1):
         for col_idx, value in enumerate(row):
             if value is not None:
                 celldata.append({
@@ -339,7 +352,22 @@ async def load(request: Request):
         "column": len(columns),
         "row": max(len(rows) + 20, 100),
         "total": 1,
-        "config": {},
+        "config": {
+            "columnlen": {},
+            "rowlen": {},
+            "column": {"len": len(columns)},
+            "row": {"len": max(len(rows) + 20, 100)},
+            "freeze": {"row": 1},  # Freeze the first row
+            "filter": {"row": 1},  # Enable filter on the first row
+            "authority": {
+                "sheet": 1,  # Enable sheet protection
+                "range": [{
+                    "row": [0, 0],  # Protect first row (row index 0)
+                    #"column": [0, len(columns) - 1],  # Protect all columns
+                    "type": "protection"
+                }]
+            }
+        },
         "index": 0
     }])
 
@@ -347,38 +375,41 @@ async def load(request: Request):
 async def update(websocket: WebSocket):
     await websocket.accept()
     uid = str(uuid.uuid4())
-    
+    table_name = websocket.query_params.get("g")
+    role = websocket.session["role"]
     try:
-        Pool.add(uid, websocket)
+        Pool.add(table_name, uid, websocket)
         
         while True:
             try:
                 message = await websocket.receive_text()
-                if message == "rub":  # 心跳检测
-                    await websocket.send_text("rub")  # 回应心跳
+                if message == "rub":  # Changed back to "rub"
+                    #await websocket.send_text("rub")  # Changed back to "rub"
                     continue
                 
                 data_raw = message.encode('iso-8859-1')
                 data_unzip = unquote(zlib.decompress(data_raw, 16).decode())
+                print(f"Received data: {data_unzip}")
                 json_data = json.loads(data_unzip)
-                print(data_unzip)
-                resp_data = {
-                    "data": data_unzip,
-                    "id": uid,
-                    "returnMessage": "success",
-                    "status": 0,
-                    "type": 3 if json_data.get("t") == "mv" else 2,
-                    "username": uid,
-                }
                 
-                await Pool.notify(json.dumps(resp_data), uid)
+                if json_data.get("t") != "cg":
+                    resp_data = {
+                        "data": data_unzip,
+                        "id": uid,
+                        "returnMessage": "success",
+                        "status": 0,
+                        "type": 3 if json_data.get("t") == "mv" else 2,
+                        "username": role,
+                    }
+                    print(f"Notifying table: {table_name}, data: {json.dumps(resp_data)}, by: {uid}")
+                    await Pool.notify(table_name, json.dumps(resp_data), uid)
                 
             except Exception:
-                # 如果收到断开连接消息，直接退出循环
+                # If a disconnect message is received, exit the loop
                 break
                 
     finally:
-        Pool.delete(uid)
+        Pool.delete(table_name, uid)
 
 if __name__ == '__main__':
     import uvicorn
