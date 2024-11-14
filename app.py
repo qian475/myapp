@@ -1,20 +1,17 @@
-# Standard library imports
-import hashlib
-import json
-import threading
-import uuid
-import zlib
-from datetime import datetime
-from urllib.parse import unquote
-
-# Third-party imports
-from fastapi import FastAPI, Request, Response, HTTPException, Depends, WebSocket
+from fastapi import FastAPI, Request, Response, HTTPException, Depends,WebSocket
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette.middleware.sessions import SessionMiddleware
 import psycopg2
+from datetime import datetime
+import hashlib
+import json
+import uuid
+import zlib
+from urllib.parse import unquote
+import threading
 
 app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
@@ -288,6 +285,7 @@ class Pool:
 
     @classmethod
     async def notify(cls, table_name, data, by):
+        #print(f"Notifying table: {table_name}, data: {data}, by: {by}")
         with cls.lock:
             if table_name in cls.pools:
                 for uid, ws in cls.pools[table_name].items():
@@ -303,6 +301,7 @@ class Pool:
 async def load(request: Request):
     # 从查询参数中获取 table_name
     table_name = request.query_params.get("table")
+    #print(f"Received table_name: {table_name}")  # 调试输出
     
     if not table_name:
         return json.dumps([{
@@ -325,34 +324,24 @@ async def load(request: Request):
     
     # Convert database data to celldata format
     celldata = []
-    # Add headers with protection
+    # Add headers
     for col_idx, col_name in enumerate(columns):
         celldata.append({
             "r": 0,
             "c": col_idx,
-            "v": {
-                "v": col_name, 
-                "m": col_name,
-                "ct": {"fa": "@", "t": "t"},  # 文本格式
-                "lo": True  # 锁定单元格
-            }
+            "v": {"v": col_name, "m": col_name}
         })
     
-    # Add regular data cells (unlocked)
     for row_idx, row in enumerate(rows, start=1):
         for col_idx, value in enumerate(row):
             if value is not None:
                 celldata.append({
                     "r": row_idx,
                     "c": col_idx,
-                    "v": {
-                        "v": str(value), 
-                        "m": str(value),
-                        "lo": False  # 不锁定其他单元格
-                    }
+                    "v": {"v": str(value), "m": str(value)}
                 })
 
-    # 回完整的数据结构
+    # 返回完整的数据结构
 
     return json.dumps([{
         "name": table_name,
@@ -363,10 +352,13 @@ async def load(request: Request):
         "column": len(columns),
         "row": max(len(rows) + 20, 100),
         "total": 1,
-        "luckysheet_alternateformat_save": 1,
         "config": {
             "columnlen": {},
             "rowlen": {},
+            "column": {"len": len(columns)},
+            "row": {"len": max(len(rows) + 20, 100)},
+            "freeze": {"row": 1},  # Freeze the first row
+            "filter": {"row": 1},  # Enable filter on the first row
             "authority": {
                 "sheet": 1,
                 "hintText": "该表格已启用保护，第一行不可编辑",
@@ -411,10 +403,7 @@ async def update(websocket: WebSocket):
                         "type": 3 if json_data.get("t") == "mv" else 2,
                         "username": role,
                     }
-                if json_data.get("t") == "v":
-                    ...
-
-                await Pool.notify(table_name, json.dumps(resp_data), uid)
+                    await Pool.notify(table_name, json.dumps(resp_data), uid)
                 
             except Exception:
                 # If a disconnect message is received, exit the loop
