@@ -199,7 +199,7 @@
             </div>
         </div>
         <div class="content">
-            {% if not request.endpoint in ['admin_db', 'admin_sheet'] %}
+            {% if request.endpoint == 'admin' %}
             <h1>管理员页面</h1>
             <div class="welcome-message">
                 <p>欢迎回来，管理员！</p>

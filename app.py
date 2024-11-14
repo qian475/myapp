@@ -1,16 +1,24 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from fastapi import FastAPI, Request, Response, HTTPException, Depends,WebSocket
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from starlette.middleware.sessions import SessionMiddleware
 import psycopg2
 from datetime import datetime
 import hashlib
-from flask_socketio import SocketIO, emit, join_room, leave_room
+import json
+import uuid
+import zlib
+from urllib.parse import unquote
+import threading
 
-app = Flask(__name__, 
-    template_folder='templates',  # 设置模板目录
-    static_folder='static'        # 设置静态文件目录
-)
-app.secret_key = 'your_secret_key'
-# 初始化 SocketIO
-socketio = SocketIO(app)
+app = FastAPI()
+app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
+# Mount static files and templates
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # 数据库配置
 class DBConfig:
     POSTGRES = {
@@ -43,192 +51,172 @@ def execute_query(query, params=None, commit=False):
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-@app.route('/')
-def index():
-    if 'user_id' in session:
-        role = session['role']
-        if role == '管理员':
-            return redirect(url_for('admin_page'))
-        elif role == '财务人员':
-            return redirect(url_for('finance_page'))
-        elif role == '采购人员':
-            return redirect(url_for('purchase_page'))
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    if "user_id" in request.session:
+        role = request.session["role"]
+        if role == "管理员":
+            return RedirectResponse(url="/admin")
+        elif role == "财务人员":
+            return RedirectResponse(url="/finance")
+        elif role == "采购人员":
+            return RedirectResponse(url="/purchase")
         else:
-            return redirect(url_for('other_page'))
-    return render_template('login.html')
+            return RedirectResponse(url="/other")
+    return templates.TemplateResponse("login.html", {"request": request})
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = hash_password(request.form['password'])  # Hash the password
-        
-        query = "SELECT id, role FROM users WHERE username = %s AND password = %s"  # Changed ? to %s for PostgreSQL
-        
-        user = execute_query(query, (username, password))
-        
-        if user and user[0]:
-            session['user_id'] = user[0][0]
-            session['role'] = user[0][1]
-            return redirect(url_for('index'))
-        return '登录失败'
-    return render_template('login.html')
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = hash_password(request.form['password'])  # Hash the password
-        confirm_password = hash_password(request.form['confirm_password'])  # Hash confirmation password
-        role = request.form['role']
-        
-        # 不允许注册管理员角色
-        if role == '管理员':
-            return '不允许注册管理员角色'
-            
-        # 为财务人员和采购人员添加待审核后缀
-        if role in ['财务人员', '采购人员']:
-            role = f"{role}(待审核)"
-        
-        if password != confirm_password:
-            return '两次输入的密码不一致'
-        
-        query = "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"
-        
-        try:
-            execute_query(query, (username, password, role), commit=True)
-            return redirect(url_for('login'))
-        except:
-            return '注册失败，用户名可能已存在'
-    return render_template('register.html')
-
-@app.route('/admin')
-def admin_page():
-    if 'user_id' in session and session['role'] == '管理员':
-        return render_template('admin.html', now=datetime.now(), tables=get_all_tables())
-    return redirect(url_for('login'))
-
-@app.route('/finance')
-def finance_page():
-    if 'user_id' in session and session['role'] == '财务人员':
-        return render_template('finance.html')
-    return redirect(url_for('login'))
-
-@app.route('/purchase')
-def purchase_page():
-    if 'user_id' in session and session['role'] == '采购人员':
-        return render_template('purchase.html')
-    return redirect(url_for('login'))
-
-@app.route('/other')
-def other_page():
-    if 'user_id' in session:
-        return render_template('other.html')
-    return redirect(url_for('login'))
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-@app.route('/switch_db/<db_type>')
-def switch_db(db_type):
-    global CURRENT_DB
-    if db_type in ['mysql', 'sqlite']:
-        CURRENT_DB = db_type
-        return f'已切换到 {db_type} 数据库'
-    return '无效的数据库类型'
-
-@app.route('/admin/db')
-def admin_db():
-    if 'user_id' not in session or session['role'] != '管理员':
-        return redirect(url_for('login'))
+@app.post("/login")
+async def login(request: Request):
+    form_data = await request.form()
+    username = form_data["username"]
+    password = hash_password(form_data["password"])
     
-    query = "SELECT id, username, role FROM users"
-    users = execute_query(query)
-    return render_template('admin_db.html', users=users, now=datetime.now(), tables=get_all_tables())
+    query = "SELECT id, role FROM users WHERE username = %s AND password = %s"
+    user = execute_query(query, (username, password))
+    
+    if user and user[0]:
+        request.session["user_id"] = user[0][0]
+        request.session["role"] = user[0][1]
+        return RedirectResponse(url="/", status_code=303)
+    return HTTPException(status_code=401, detail="登录失败")
 
-@app.route('/admin/db/add', methods=['POST'])
-def admin_db_add():
-    if 'user_id' not in session or session['role'] != '管理员':
-        return redirect(url_for('login'))
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request):
+    return templates.TemplateResponse("register.html", {"request": request})
+
+@app.post("/register")
+async def register(request: Request):
+    form_data = await request.form()
+    username = form_data["username"]
+    password = hash_password(form_data["password"])
+    confirm_password = hash_password(form_data["confirm_password"])
+    role = form_data["role"]
     
-    username = request.form['username']
-    password = hash_password(request.form['password'])  # Hash the password
-    role = request.form['role']
+    # 不允许注册管理员角色
+    if role == "管理员":
+        return HTTPException(status_code=400, detail="不允许注册管理员角色")
     
-    query = "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"  # Changed ? to %s for PostgreSQL
+    # 为财务人员和采购人员添加待审核后缀
+    if role in ["财务人员", "采购人员"]:
+        role = f"{role}(待审核)"
+    
+    if password != confirm_password:
+        return HTTPException(status_code=400, detail="两次输入的密码不一致")
+    
+    query = "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"
     
     try:
         execute_query(query, (username, password, role), commit=True)
-        return redirect(url_for('admin_db'))
+        return RedirectResponse(url="/login", status_code=303)
     except:
-        return '添加用户失败，用户名可能已存在'
+        return HTTPException(status_code=500, detail="注册失败，用户名可能已存在")
 
-@app.route('/admin/db/delete', methods=['POST'])
-def admin_db_delete():
-    if 'user_id' not in session or session['role'] != '管理员':
-        return redirect(url_for('login'))
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    if "user_id" in request.session and request.session["role"] == "管理员":
+        return templates.TemplateResponse("admin.html", {"request": request, "now": datetime.now(), "tables": get_all_tables()})
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/finance", response_class=HTMLResponse)
+async def finance_page(request: Request):
+    if "user_id" in request.session and request.session["role"] == "财务人员":
+        return templates.TemplateResponse("finance.html", {"request": request})
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/purchase", response_class=HTMLResponse)
+async def purchase_page(request: Request):
+    if "user_id" in request.session and request.session["role"] == "采购人员":
+        return templates.TemplateResponse("purchase.html", {"request": request})
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/other", response_class=HTMLResponse)
+async def other_page(request: Request):
+    if "user_id" in request.session:
+        return templates.TemplateResponse("other.html", {"request": request})
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/switch_db/{db_type}")
+async def switch_db(db_type: str, request: Request):
+    global CURRENT_DB
+    if db_type in ["mysql", "sqlite"]:
+        CURRENT_DB = db_type
+        return HTMLResponse(f"已切换到 {db_type} 数据库")
+    return HTMLResponse("无效的数据库类型")
+
+@app.get("/admin/db", response_class=HTMLResponse)
+async def admin_db(request: Request):
+    if "user_id" not in request.session or request.session["role"] != "管理员":
+        return RedirectResponse(url="/login", status_code=303)
     
-    user_id = request.form['user_id']
+    query = "SELECT id, username, role FROM users"
+    users = execute_query(query)
+    return templates.TemplateResponse("admin_db.html", {"request": request, "users": users, "now": datetime.now(), "tables": get_all_tables()})
+
+@app.post("/admin/db/add")
+async def admin_db_add(request: Request):
+    if "user_id" not in request.session or request.session["role"] != "管理员":
+        return RedirectResponse(url="/login", status_code=303)
+    
+    username = request.form["username"]
+    password = hash_password(request.form["password"])
+    role = request.form["role"]
+    
+    query = "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"
+    
+    try:
+        execute_query(query, (username, password, role), commit=True)
+        return RedirectResponse(url="/admin/db", status_code=303)
+    except:
+        return HTTPException(status_code=500, detail="添加用户失败，用户名可能已存在")
+
+@app.post("/admin/db/delete")
+async def admin_db_delete(request: Request):
+    if "user_id" not in request.session or request.session["role"] != "管理员":
+        return RedirectResponse(url="/login", status_code=303)
+    
+    user_id = request.form["user_id"]
     query = "DELETE FROM users WHERE id = ?"
     
     try:
         execute_query(query, (user_id,), commit=True)
-        return redirect(url_for('admin_db'))
+        return RedirectResponse(url="/admin/db", status_code=303)
     except:
-        return '删除用户失败'
+        return HTTPException(status_code=500, detail="删除用户失败")
 
-@app.route('/admin/db/edit', methods=['POST'])
-def admin_db_edit():
-    if 'user_id' not in session or session['role'] != '管理员':
-        return redirect(url_for('login'))
+@app.post("/admin/db/edit")
+async def admin_db_edit(request: Request):
+    if "user_id" not in request.session or request.session["role"] != "管理员":
+        return RedirectResponse(url="/login", status_code=303)
     
-    user_id = request.form['user_id']
-    username = request.form['username']
-    role = request.form['role']
-    password = request.form.get('password')  # 密码是可选的
+    form_data = await request.form()
+    user_id = form_data["user_id"]
+    username = form_data["username"]
+    role = form_data["role"]
+    password = form_data.get("password")
     
-    if password:  # 如果提供了新密码
-        password = hash_password(password)  # Hash the new password
-        query = "UPDATE users SET username = %s, role = %s, password = %s WHERE id = %s"  # Changed ? to %s for PostgreSQL
+    if password:
+        password = hash_password(password)
+        query = "UPDATE users SET username = %s, role = %s, password = %s WHERE id = %s"
         params = (username, role, password, user_id)
     else:
-        query = "UPDATE users SET username = %s, role = %s WHERE id = %s"  # Changed ? to %s for PostgreSQL
+        query = "UPDATE users SET username = %s, role = %s WHERE id = %s"
         params = (username, role, user_id)
     
     try:
         execute_query(query, params, commit=True)
-        return redirect(url_for('admin_db'))
+        return RedirectResponse(url="/admin/db", status_code=303)
     except:
-        return '修改用户失败'
+        return HTTPException(status_code=500, detail="修改用户失败")
     
-
-
-@socketio.on('connect')
-def handle_connect():
-    print('Client connected')
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    print('Client disconnected')
-
-@socketio.on('update_cell')
-def handle_update_cell(data):
-    # 处理单元格更新
-    emit('update_cell', data, broadcast=True, include_self=False)
-
-@socketio.on('join')
-def on_join(data):
-    room = data['room']
-    join_room(room)
-    emit('status', {'msg': f'{data["username"]} has entered the room.'}, room=room)
-
-@socketio.on('leave')
-def on_leave(data):
-    room = data['room']
-    leave_room(room)
-    emit('status', {'msg': f'{data["username"]} has left the room.'}, room=room)
 
 def get_table_columns(table_name):
     query = """
@@ -236,25 +224,28 @@ def get_table_columns(table_name):
     FROM information_schema.columns 
     WHERE table_schema = 'public' AND table_name = %s
     """
-    print(query)
     columns = execute_query(query, (table_name,))
-    print(columns)
     return [col[0] for col in columns]
 
-@app.route('/sheet')
-def sheet_view():
-    if 'user_id' not in session or session['role'] != '管理员':
-        return redirect(url_for('login'))
+@app.get("/sheet", response_class=HTMLResponse, name="sheet_view")
+async def sheet_view(request: Request):
+    if "user_id" not in request.session or request.session["role"] != "管理员":
+        return RedirectResponse(url="/login", status_code=303)
     
-    table_name = request.args.get('table')
-    print(f"Received table_name: {table_name}")  # 调试输出
+    table_name = request.query_params.get("table")
+    if not table_name:
+        return RedirectResponse(url="/admin/sheet", status_code=303)
     
     columns = []
-    if table_name:
-        columns = get_table_columns(table_name)
-        print(f"Found columns: {columns}")  # 调试输出
+    # Get column names and convert them to a list of dictionaries with column info
+    raw_columns = get_table_columns(table_name)
+    columns = [{"title": col, "key": col} for col in raw_columns]
     
-    return render_template('sheet.html', columns=columns)
+    return templates.TemplateResponse("sheet.html", {
+        "request": request, 
+        "columns": columns,
+        "table_name": table_name  # Pass table_name to template
+    })
 
 def get_all_tables():
     query = """
@@ -264,18 +255,131 @@ def get_all_tables():
     """
     return [table[0] for table in execute_query(query)]
 
-@app.route('/admin/sheet')
-def admin_sheet():
-    if 'user_id' not in session or session['role'] != '管理员':
-        return redirect(url_for('login'))
+@app.get("/admin/sheet", response_class=HTMLResponse, name="admin_sheet")
+async def admin_sheet(request: Request):
+    if "user_id" not in request.session or request.session["role"] != "管理员":
+        return RedirectResponse(url="/login", status_code=303)
     
-    tables = get_all_tables()  # 获取所有表名
-    selected_table = request.args.get('table')  # 获取当前选中的表名
+    tables = get_all_tables()
+    selected_table = request.query_params.get("table")
     
-    return render_template('admin_sheet.html', tables=tables, selected_table=selected_table)
+    return templates.TemplateResponse("admin_sheet.html", {"request": request, "tables": tables, "selected_table": selected_table})
+
+# 复用原有的 Pool 类来管理 WebSocket 连接
+class Pool:
+    lock = threading.Lock()
+    pool = {}
+
+    @classmethod
+    def add(cls, uid, ws):
+        with cls.lock:
+            cls.pool[uid] = ws
+
+    @classmethod
+    def delete(cls, uid):
+        with cls.lock:
+            cls.pool.pop(uid, None)
+
+    @classmethod
+    async def notify(cls, data, by):
+        with cls.lock:
+            for uid, ws in cls.pool.items():
+                if uid == by:
+                    continue
+                try:
+                    await ws.send_text(data)
+                except Exception:
+                    pass
 
 
+@app.post("/luckysheet/api/loadUrl")
+async def load(request: Request):
+    # 从查询参数中获取 table_name
+    table_name = request.query_params.get("table")
+    #print(f"Received table_name: {table_name}")  # 调试输出
+    
+    if not table_name:
+        return json.dumps([{
+            "name": "Sheet1",
+            "index": "sheet_01",
+            "order": 0,
+            "status": 1,
+            "celldata": [],
+            "column": 26,
+            "row": 100,
+            "total": 1,
+        }])
+
+    # Get columns from the table
+    columns = get_table_columns(table_name)
+    
+    # Get data from the table
+    query = f"SELECT * FROM {table_name}"
+    rows = execute_query(query)
+    
+    # Convert database data to celldata format
+    celldata = []
+    for row_idx, row in enumerate(rows):
+        for col_idx, value in enumerate(row):
+            if value is not None:
+                celldata.append({
+                    "r": row_idx,
+                    "c": col_idx,
+                    "v": {"v": str(value), "m": str(value)}
+                })
+
+    # 返回完整的数据结构
+
+    return json.dumps([{
+        "name": table_name,
+        "index": "sheet_01",
+        "order": 0,
+        "status": 1,
+        "celldata": celldata,
+        "column": len(columns),
+        "row": max(len(rows) + 20, 100),
+        "total": 1,
+        "config": {},
+        "index": 0
+    }])
+
+@app.websocket("/luckysheet/api/updateUrl")
+async def update(websocket: WebSocket):
+    await websocket.accept()
+    uid = str(uuid.uuid4())
+    
+    try:
+        Pool.add(uid, websocket)
+        
+        while True:
+            try:
+                message = await websocket.receive_text()
+                if message == "rub":  # 心跳检测
+                    await websocket.send_text("rub")  # 回应心跳
+                    continue
+                
+                data_raw = message.encode('iso-8859-1')
+                data_unzip = unquote(zlib.decompress(data_raw, 16).decode())
+                json_data = json.loads(data_unzip)
+                print(data_unzip)
+                resp_data = {
+                    "data": data_unzip,
+                    "id": uid,
+                    "returnMessage": "success",
+                    "status": 0,
+                    "type": 3 if json_data.get("t") == "mv" else 2,
+                    "username": uid,
+                }
+                
+                await Pool.notify(json.dumps(resp_data), uid)
+                
+            except Exception:
+                # 如果收到断开连接消息，直接退出循环
+                break
+                
+    finally:
+        Pool.delete(uid)
 
 if __name__ == '__main__':
-    #app.run(host='0.0.0.0', debug=True)
-    socketio.run(app, debug=True)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000)

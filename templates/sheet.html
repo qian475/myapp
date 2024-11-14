@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>Luckysheet 页面</title>
-    <!-- 引入本地 Luckysheet 的 CSS 和 JS -->
+    <!-- Add jQuery before other scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- Then load Luckysheet scripts -->
     <link rel='stylesheet' href='./static/luckysheet/plugins/css/pluginsCss.css' />
 	<link rel='stylesheet' href='./static/luckysheet/plugins/plugins.css' />
 	<link rel='stylesheet' href='./static/luckysheet/css/luckysheet.css' />
@@ -13,7 +16,6 @@
 	<!-- rollup luckysheet.js -->
 	<script src="./static/luckysheet/luckysheet.umd.js"></script>
 
-    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
 
 </head>
 <body>
@@ -21,27 +23,24 @@
 
     <script>
         $(function () {
+            // 从 URL 获取 table 参数
+            const urlParams = new URLSearchParams(window.location.search);
+            const tableName = urlParams.get('table');
+            
             var lang = 'zh';
-            var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
-
-            socket.on('connect', function() {
-                console.log('Connected to server');
-            });
-
-            socket.on('update_cell', function(data) {
-                // 更新 Luckysheet 的单元格
-                luckysheet.setCellValue(data.row, data.col, data.value);
-            });
 
             // Get columns from Flask template
             var columns = {{ columns|tojson|safe if columns else '[]' }};
-            console.log(columns);
             var options = {
                 container: 'luckysheet',
                 lang: lang,
                 forceCalculation: false,
                 showinfobar: false,
-                plugins: ['chart'],
+                gridKey: tableName,
+                allowUpdate: true,
+                loadUrl: `/luckysheet/api/loadUrl?table=${tableName}`,
+                updateUrl: `ws://${document.location.host}/luckysheet/api/updateUrl`,
+                data: [],
                 fontList: [
                     {
                         "fontName": "HanaleiFill",
@@ -106,7 +105,6 @@
                     cellUpdated: function (r, c, oldValue, newValue, isRefresh) {
                         // 当单元格更新时，发送更新到服务器
                         //console.log('cellUpdated', r, c, oldValue, newValue, isRefresh);
-                        socket.emit('update_cell', {row: r, col: c, value: newValue});
                         
                     },
                     sheetActivate: function (index, isPivotInitial, isNewSheet) {
@@ -164,17 +162,10 @@
                 }]
             }; */
 
-            options.data = [{
-                name: "Sheet1",
-                color: "",
-                status: 1,
-                order: 0,
-                data: [],
-                config: {},
-                index: 0,
-                // Set column count based on database columns
-                column: columns.length || 26  // Default to 26 if no columns specified
-            }];
+            // 如果有 loadUrl，则移除初始 data
+            if (options.loadUrl) {
+                delete options.data;
+            }
 
             luckysheet.create(options);
         });
