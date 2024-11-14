@@ -1,2 +1,8 @@
-Flask
-mysql-connector-python
+fastapi
+uvicorn
+python-multipart
+jinja2
+psycopg2-binary
+python-jose[cryptography]
+starlette
+aiofiles
